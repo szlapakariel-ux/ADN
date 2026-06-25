@@ -107,6 +107,13 @@ Un par de definiciones que se repiten todo el tiempo:
 - TORNILLO #69 — Integración paralela clonable (Meta/MercadoPago/Mobbex) + facade *(Universal)*
 - TORNILLO #70 — Policy chain con precedencia y snapshot congelado *(Universal)*
 
+### Área 11 — AGENTES CONVERSACIONALES (un agente de IA que habla con personas reales)
+- TORNILLO PY-16 — El bot se calla cuando hay un humano *(Universal)*
+- TORNILLO PY-17 — La confianza tiene umbral: debajo de 0.55 no actúes *(Universal)*
+- TORNILLO PY-18 — Resolver antes de gastar tokens *(Universal)*
+- TORNILLO PY-19 — El handoff lleva contexto, no solo una notificación *(Universal)*
+- TORNILLO PY-20 — Historial acotado para el LLM *(Universal)*
+
 ---
 
 ## ÁREA 1 — EL PLANO DE LA CASA
@@ -721,6 +728,59 @@ Un par de definiciones que se repiten todo el tiempo:
 **Ejemplo real del repo:** `app/services/patient_policy_service.py:263` `origen = OrigenPoliticaTurno.DEFAULT; ... :289 origen = OrigenPoliticaTurno.PACIENTE; ... :301 origen = OrigenPoliticaTurno.TURNO`; consumido en `turno_booking_service.py:15,220`. Declarado en `.github/copilot-instructions.md:25` y `docs/CLAUDE.md:57-69` (R4).
 **La regla para el próximo proyecto:** Para reglas con múltiples fuentes, resolvé en una sola función con precedencia explícita de menor a mayor especificidad, etiquetá el origen de la decisión, exigí justificación para overrides manuales, y persistí un snapshot inmutable en la entidad para que cambios de configuración no reescriban el histórico.
 **Señal de que lo estás usando bien:** Existe un enum de Origen (DEFAULT/PACIENTE/TURNO), una función `resolve_*_policy` única, y una `apply_*_snapshot` que se invoca al crear la entidad; el override manual lanza error si falta motivo.
+**Aplica a:** [x] Universal
+
+---
+
+## ÁREA 11 — AGENTES CONVERSACIONALES
+### Los tornillos que gobiernan un agente de IA que habla con personas reales
+
+### TORNILLO PY-16 — El bot se calla cuando hay un humano
+**En una línea:** Antes de generar cualquier respuesta, el agente verifica si la conversación fue derivada a un operador humano; si es así, no dice nada.
+**Lo que hace el Senior:** En `agent_service.py`, la primera compuerta de `procesar_mensaje_agente()` es `_tiene_control_humano()`. Si devuelve `True`, retorna `(True, "", None)` —respuesta vacía— sin tocar el LLM ni ejecutar ninguna acción. El silencio es explícito, no un olvido.
+**Ejemplo real del repo:** `agent_service.py:711` `if _tiene_control_humano(contexto): return (True, "", None)`.
+**La regla para el próximo proyecto:** En cualquier agente con posibilidad de escalada humana, la primera compuerta del flujo debe ser: ¿hay un humano manejando esto? Si la respuesta es sí, el agente devuelve silencio explícito y no ejecuta nada más. El humano no debe competir con el bot por la conversación.
+**Señal de que lo estás usando bien:** Si un operador toma una conversación y el paciente escribe otro mensaje, el bot no responde. El operador no recibe una respuesta del bot que contradiga lo que acaba de escribir.
+**Aplica a:** [x] Universal
+
+---
+
+### TORNILLO PY-17 — La confianza tiene umbral: debajo de 0.55 no actúes
+**En una línea:** El LLM devuelve un número de confianza entre 0 y 1; si está por debajo del umbral, el agente no ejecuta la acción sino que escala o pide aclaración.
+**Lo que hace el Senior:** En `agent_intents_service.py:1454`, después de llamar al LLM, evalúa `if intencion == "otro" or confianza < 0.55`. Si la confianza es baja, entra a una cascada de fallback: intenta el router de baja confianza, luego respuesta conversacional, luego información de la psicóloga. Si falla tres veces seguidas (contador de incomprensión), activa el handoff a humano con motivo `"incomprension_reiterada"`.
+**Ejemplo real del repo:** `agent_intents_service.py:1454` `if intencion == "otro" or confianza < 0.55:` (cascada de fallback) y `if intentos >= 3: _activar_control_humano(..., "incomprension_reiterada")`.
+**La regla para el próximo proyecto:** Nunca ejecutes una acción con impacto (reservar, cancelar, cobrar) si el LLM no está seguro. Pedile al LLM un score de confianza junto con la intención, definí un umbral explícito (entre 0.5 y 0.7 según el riesgo de la acción), y al tercer intento fallido derivá a humano con el historial de lo que no se entendió.
+**Señal de que lo estás usando bien:** El agente nunca cancela un turno porque "entendió" un mensaje ambiguo. Si el usuario escribe algo confuso tres veces, un humano recibe la conversación con el resumen de los tres intentos fallidos.
+**Aplica a:** [x] Universal
+
+---
+
+### TORNILLO PY-18 — Resolver antes de gastar tokens
+**En una línea:** Un router determinístico (regex, keywords, reglas) intenta resolver el mensaje antes de llamar al LLM; el LLM es el último recurso, no el primero.
+**Lo que hace el Senior:** `agent_message_router_service.py` implementa un router basado en patrones que intercepta intenciones operativas comunes (listar turnos, consultar deuda, FAQ) antes de que el mensaje llegue al LLM. Solo si el router no resuelve, se gasta la llamada a OpenAI/Anthropic. Además hay un sistema de aprendizaje: si una intención se resuelve bien repetidamente por el LLM, el patrón se agrega al router para la próxima vez.
+**Ejemplo real del repo:** `agent_service.py` `resultado = _resolver_outcome_ruteo_temprano(mensaje, contexto); if resultado: return resultado` y recién después la llamada al LLM.
+**La regla para el próximo proyecto:** En un agente conversacional, poné un router determinístico antes del LLM para las intenciones frecuentes y predecibles. Medí qué porcentaje de mensajes resuelve el router vs el LLM. Con el tiempo, los patrones del LLM deben migrar al router: el agente se vuelve más barato y más rápido sin perder capacidad.
+**Señal de que lo estás usando bien:** El costo de tokens baja con el tiempo aunque el volumen de mensajes suba. Las consultas frecuentes (horarios, turnos, deuda) se resuelven en milisegundos sin llamada externa.
+**Aplica a:** [x] Universal
+
+---
+
+### TORNILLO PY-19 — El handoff lleva contexto, no solo una notificación
+**En una línea:** Cuando el agente deriva a un humano, arma un resumen estructurado con motivo, intención detectada y última frase del paciente, para que el operador entre con contexto y no a ciegas.
+**Lo que hace el Senior:** `agent_handoff_service.py` implementa `build_handoff_summary()` que construye un objeto con: motivo del handoff (`solicitud_paciente` / `incomprension_reiterada` / `cliente_inactivo` / `sin_permiso`), la intención que el LLM detectó, la última frase del paciente, y el turno objetivo si había uno en juego. Este resumen se adjunta al contexto y se envía al operador en el mismo momento en que se activa el control humano.
+**Ejemplo real del repo:** `agent_handoff_service.py` `def build_handoff_summary(motivo, intencion, ultimo_mensaje, turno_objetivo): return {"motivo": motivo, "intencion_detectada": intencion, "ultimo_mensaje_paciente": ultimo_mensaje, "turno_objetivo": turno_objetivo, "timestamp": now()}`.
+**La regla para el próximo proyecto:** Cuando un agente escala a humano, nunca mandes solo "hay un usuario esperando". Armá un resumen estructurado con: por qué escaló (motivo), qué quería el usuario (intención), qué dijo exactamente (último mensaje), y qué estaba en juego (recurso/acción objetivo). El operador tiene que poder tomar el caso en 10 segundos sin leer todo el hilo.
+**Señal de que lo estás usando bien:** Un operador puede responder al paciente correctamente sin leer el historial completo de la conversación. El tiempo promedio de primera respuesta del operador baja porque ya sabe de qué se trata.
+**Aplica a:** [x] Universal
+
+---
+
+### TORNILLO PY-20 — Historial acotado para el LLM
+**En una línea:** El agente no le pasa toda la conversación al LLM; define ventanas distintas según la tarea (10 mensajes para responder, 6 para clasificar) y las respeta siempre.
+**Lo que hace el Senior:** En `llm_service.py`, `generar_respuesta()` toma `mensajes[-10:]` y los mapea a roles user/assistant. El clasificador de intención usa `mensajes[-6:]` recortados a 120 caracteres cada uno. Estas ventanas son constantes deliberadas, no defaults olvidados: controlan el costo de tokens y evitan que el LLM se pierda en conversaciones largas.
+**Ejemplo real del repo:** `llm_service.py` `contexto_reciente = mensajes[-10:]` (para responder) y `snippet = [m[:120] for m in mensajes[-6:]]` (para clasificar intención).
+**La regla para el próximo proyecto:** Definí explícitamente cuántos mensajes del historial le pasás al LLM según la tarea: más contexto para generar respuestas, menos para clasificar intención. Nunca pases el historial completo sin techo: el costo escala linealmente y la calidad no mejora después de cierto punto. Documentá las ventanas como constantes con nombre, no como números mágicos.
+**Señal de que lo estás usando bien:** El costo por conversación no escala con la duración de la conversación después de los primeros mensajes. Podés calcular el costo máximo por turno antes de que el usuario escriba nada.
 **Aplica a:** [x] Universal
 
 ---
