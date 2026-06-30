@@ -1,7 +1,7 @@
 # SZoluciones — Ferretería Maestra
 ### El tornillero unificado que se lee ANTES de arrancar cualquier proyecto, sin importar el stack
 
-> **Qué es esto.** La síntesis de los tres tornilleros de SZoluciones —el de TypeScript (monorepo *Movete*, 60 tornillos), el de Python (API de psicólogas con FastAPI, 72 tornillos) y el condensado de universales (32 tornillos)— en UN solo documento. Acá no hay "lo de TS" y "lo de Python": hay **principios** que sobrevivieron a la prueba de aparecer, con sintaxis distinta, en dos repos reales y distintos.
+> **Qué es esto.** La síntesis de los tres tornilleros de SZoluciones —el de TypeScript (60 tornillos), el de Python (FastAPI, 72 tornillos) y el condensado de universales (32 tornillos)— en UN solo documento. Acá no hay "lo de TS" y "lo de Python": hay **principios** que sobrevivieron a la prueba de aparecer, con sintaxis distinta, en proyectos reales de SZoluciones.
 
 > **Cómo se construyó.** Se leyeron los tres archivos completos. Se verificó cada uno de los 32 universales declarados contra el texto REAL de TS y Python (no contra los números). Se revisaron además los mapeos "Confirma #N" que el tornillero Python hizo de forma *inferencial* (sin haber leído el texto TS). Resultado: varios se confirmaron, algunos se reclasificaron, y aparecieron universales nuevos que un repo había escondido como "Solo TS" o "Solo Python".
 
@@ -79,13 +79,13 @@ El archivo `szoluciones_tornillos_universales.md` listaba 32 universales tomados
 #### U-01 — El tenant sale del token firmado, nunca del cliente
 **(TS #9 / TS #14 · PY #6)**
 
-**En una línea:** El identificador de inquilino (org, cuenta, psicóloga, clínica) se toma SIEMPRE del token de sesión ya verificado, jamás de un parámetro, body o header que el cliente controle.
+**En una línea:** El identificador de inquilino (org, cuenta, inquilino, clínica) se toma SIEMPRE del token de sesión ya verificado, jamás de un parámetro, body o header que el cliente controle.
 
 **La regla universal:** El dato que decide "qué datos podés ver" no puede venir de quien quiere verlos. Extraé el `tenant_id` del sujeto autenticado del token y usalo como primer filtro de toda operación. Los ids que sí manda el cliente (un `:id` de ruta, un campo del body) se usan únicamente combinados con `AND tenant_id = <el del token>`. Si el token no trae tenant, ni siquiera tocás la base.
 
 **Cómo se ve en TypeScript:** Cada handler hace `const user = request.user as any` y usa `user.org_id` como primer parámetro del `WHERE`; un middleware (`tenancy.ts`) corta con 401 código `INVALID_TOKEN` si el JWT no trae `org_id`. El `JwtPayload` marca `org_id` con el comentario literal `CRITICAL: multi-tenancy`. Un `:id` de otra org nunca devuelve datos porque siempre va acompañado de `AND organization_id = $org`.
 
-**Cómo se ve en Python:** El tenant es `usuario.id` (la psicóloga autenticada vía `get_usuario_actual`), nunca un `?psicologa_id=` (ese parámetro directamente no existe en la API). El filtro `.filter(Model.psicologa_id == usuario.id)` aparece en ~160 consultas a lo largo de ~36 archivos. Un atacante no puede pasar el id de otra psicóloga porque el scope es implícito y server-side.
+**Cómo se ve en Python:** El tenant es `usuario.id` (el usuario autenticado vía `get_usuario_actual`), nunca un `?tenant_id=` (ese parámetro directamente no existe en la API). El filtro `.filter(Model.psicologa_id == usuario.id)` aparece en ~160 consultas a lo largo de ~36 archivos. Un atacante no puede pasar el id de otra psicóloga porque el scope es implícito y server-side.
 
 **Señal de que lo estás usando bien:** No existe NINGUNA query de negocio donde el tenant provenga del request. Buscás el nombre del tenant en una ruta y todas las ocurrencias apuntan al usuario del token. Cambiar el id en la URL por uno de otro tenant no filtra nada.
 
@@ -594,7 +594,7 @@ El archivo `szoluciones_tornillos_universales.md` listaba 32 universales tomados
 
 **Cómo se ve en TypeScript:** Una suite `rls.test.ts` crea dos orgs y, parada en org1, intenta INSERTAR datos de org2 exigiendo `rejects.toThrow()` por la policy `WITH CHECK`; prueba el fail-closed (COUNT sin contexto → 0). Honestidad del repo: la RLS hoy NO está conectada al pool real de runtime (los routes usan `pg` crudo), así que en la práctica la barrera viva es el filtro app-layer.
 
-**Cómo se ve en Python:** No hay RLS; la verdad la impone el filtro app-layer (U-02). El cruce de tenants se exige vía el 404 de los helpers `obtener_*_de_psicologa` (pedir un id de otra psicóloga da el mismo 404 que uno inexistente), reforzado por los tests de invariantes.
+**Cómo se ve en Python:** No hay RLS; la verdad la impone el filtro app-layer (U-02). El cruce de tenants se exige vía el 404 de los helpers `obtener_*_de_tenant` (pedir un id de otro inquilino da el mismo 404 que uno inexistente), reforzado por los tests de invariantes.
 
 **Señal de que lo estás usando bien:** Un test que se hace pasar por otro tenant falla; si comentás el filtro de tenant en una query, algún test se pone rojo. (Honestidad: el repo TS muestra que una RLS "declarada pero desconectada" es seguridad teórica — verificá que la red exista de verdad.)
 
@@ -654,7 +654,7 @@ El archivo `szoluciones_tornillos_universales.md` listaba 32 universales tomados
 
 **La regla universal:** Cuando partas un módulo grande en submódulos, dejá un punto de entrada (barrel/fachada) que re-exporte solo la API pública; marcá los submódulos internos como privados y que los consumidores importen siempre desde la fachada, nunca de las tripas. Así podés reorganizar el interior sin romper a quien lo usa.
 
-**Cómo se ve en TypeScript:** `packages/shared` es un paquete con un `index.ts` que es puro barrel (`export * from './types'`, `./validations`, `./permissions`); todos importan `from '@movete/shared'`, nunca con rutas relativas que cruzan paquetes.
+**Cómo se ve en TypeScript:** `packages/shared` es un paquete con un `index.ts` que es puro barrel (`export * from './types'`, `./validations`, `./permissions`); todos importan `from '@szoluciones/shared'`, nunca con rutas relativas que cruzan paquetes.
 
 **Cómo se ve en Python:** `operativo/__init__.py` importa desde `_core`/`_handlers` lo público y lo re-exporta con `__all__`; los submódulos internos llevan prefijo `_`. Quien usa el paquete importa desde `app.services.operativo`, no desde `._core`.
 
@@ -686,7 +686,7 @@ El archivo `szoluciones_tornillos_universales.md` listaba 32 universales tomados
 
 ## SECCIÓN 2 — TORNILLOS SOLO TYPESCRIPT
 
-> Los que no tienen equivalente confirmado en Python: o son idioms de TS/JS, o son específicos del proyecto Movete (monorepo + Prisma + Cloud Run). Úsalos si tu stack es TypeScript; en otro stack, leelos como referencia.
+> Los que no tienen equivalente confirmado en Python: o son idioms de TS/JS, o son específicos de un stack en particular (monorepo + Prisma + Cloud Run). Úsalos si tu stack es TypeScript; en otro stack, leelos como referencia.
 
 - **TS #1 — `workspace:*` + alias `@scope/*` para deps internas.** Idiom de monorepo de pnpm/yarn/npm; no aplica al monolito Python.
 - **TS #3 — tsconfig raíz único + override por proyecto.** Config DRY de TypeScript; no existe equivalente directo en Python.
@@ -702,7 +702,7 @@ El archivo `szoluciones_tornillos_universales.md` listaba 32 universales tomados
 - **TS #27 — Refresh silencioso en 401 con deduplicación.** El núcleo (401 → logout, U-07) es universal; la deduplicación con una promesa módulo-level es idiom de axios/fetch.
 - **TS #31 / #47 / #48 / #49 / #51 — Auto-migración `ensureXTable` + patrón de expansión de módulo.** DDL idempotente en el arranque y el "molde de módulo" (setupXRoutes + guards gemelos + CRUD canónico + registro) son específicos de Movete; Python usa Alembic versionado.
 - **TS #35 / #36 — Fallbacks de env en cascada / config de cliente build-arg vs servidor runtime.** El principio de defaults de runtime y secretos por plataforma se universalizó (U-29/U-28/U-30); el detalle de `--build-arg` de Next/Expo y Cloud Run es del proyecto.
-- **TS #42 / #44 / #45 — Barrel `@movete/shared` / permisos como array const / espejo Prisma↔TS.** El barrel se universalizó (U-38) y los enums tipados también (U-11); el `as const` que deriva el union type y el espejo manual enum-Prisma↔union-TS son idioms de TS.
+- **TS #42 / #44 / #45 — Barrel `@szoluciones/shared` / permisos como array const / espejo Prisma↔TS.** El barrel se universalizó (U-38) y los enums tipados también (U-11); el `as const` que deriva el union type y el espejo manual enum-Prisma↔union-TS son idioms de TS.
 - **TS #56 — Fallback por entorno con bandera de origen explícita (`source`).** El principio de auditar el origen del valor es bueno, pero está acoplado a la config de Mercado Pago del proyecto.
 - **TS #58 — Constructor incremental de `WHERE` + params.** El principio (SQL parametrizado) se universalizó (U-37); el patrón de armado manual con `$${params.length}` sobre `pg` crudo es de este repo (Python usa el ORM).
 
@@ -916,7 +916,7 @@ Imaginá un nuevo proyecto SZoluciones: **una plataforma de turnos para profesio
 - [ ] **U-32** — Casos negativos: doble reserva de la misma franja, turno de otro tenant (404), payload inválido (400); + la invariante de idempotencia del cobro.
 - [ ] **U-33** — Un comando único de QA/CI con cobertura mínima y la matriz de permisos por rol (profesional vs recepción vs paciente) gatea el release.
 
-> Fijate el patrón: **no inventás arquitectura nueva, ensamblás tornillos ya probados.** Un sistema de turnos de salud es, estructuralmente, las reservas de un gimnasio + los turnos de una psicóloga con otro nombre y datos más sensibles.
+> Fijate el patrón: **no inventás arquitectura nueva, ensamblás tornillos ya probados.** Un sistema de turnos de salud es, estructuralmente, cualquier sistema de turnos/reservas multi-tenant con otro nombre y datos específicos del dominio.
 
 ---
 
