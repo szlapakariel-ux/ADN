@@ -1,7 +1,7 @@
 # SZoluciones — Tornillos Universales
 ### Los principios que aplican en cualquier stack (Python, Node, PHP, Go… lo que sea)
 
-> Esta es la versión condensada de [`szoluciones_tornillos_typescript.md`](szoluciones_tornillos_typescript.md). Acá quedaron **solo los tornillos marcados `Universal`**: los que no dependen de TypeScript, Prisma, Fastify ni de nada propio de Movete. Son principios de ingeniería —tokens, queries, transacciones, errores, secrets, tests— que valen igual si mañana escribís en Django, Laravel, Spring o Express.
+> Esta es la versión condensada de [`szoluciones_tornillos_typescript.md`](szoluciones_tornillos_typescript.md). Acá quedaron **solo los tornillos marcados `Universal`**: los que no dependen de TypeScript, Prisma, Fastify ni de ningún stack en particular. Son principios de ingeniería —tokens, queries, transacciones, errores, secrets, tests— que valen igual si mañana escribís en Django, Laravel, Spring o Express.
 
 > **Los números se conservan del manual completo.** Si ves "#9" acá, es el mismo #9 de allá: así podés saltar al original para ver el ejemplo de código concreto cuando lo necesites.
 
@@ -344,21 +344,21 @@
 
 #### TORNILLO #54 — Aislamiento multi-tenant: la organizacion es ciudadano de primera clase en el dinero
 
-**En una línea:** Cada operacion de pago resuelve y filtra por organization_id de punta a punta, y cada gimnasio usa sus propias credenciales de Mercado Pago, de modo que el dinero liquida en la cuenta correcta y nada se mezcla entre tenants.
+**En una línea:** Cada operacion de pago resuelve y filtra por organization_id de punta a punta, y cada inquilino usa sus propias credenciales de Mercado Pago, de modo que el dinero liquida en la cuenta correcta y nada se mezcla entre tenants.
 
 **La regla para el próximo proyecto:** En un SaaS multi-tenant que integra pagos, haz que el tenant viaje en todo el circuito: incluye el tenant_id en la notification_url del webhook (no solo en metadata, que puede no venir), codificalo tambien en el external_reference con un prefijo namespaced ('app:{id}') para reconciliar, carga las credenciales del proveedor por-tenant (cada cliente cobra en su cuenta), y agrega 'AND tenant_id = $X' a TODA query que toque dinero antes de mutar. Rechaza con 400/404 si el tenant no se puede resolver, en vez de aplicar el pago a ciegas.
 
-**Señal de que lo estás usando bien:** Un webhook sin org_id se rechaza con 400; un pago de un gimnasio jamas activa un abono en otro; y el dinero aparece en la cuenta Mercado Pago del gimnasio correcto, no en una cuenta central.
+**Señal de que lo estás usando bien:** Un webhook sin org_id se rechaza con 400; un pago de un inquilino jamas activa un abono en otro; y el dinero aparece en la cuenta Mercado Pago del inquilino correcto, no en una cuenta central.
 
 ---
 
 #### TORNILLO #55 — Billing de la plataforma como gate de permisos con 402
 
-**En una línea:** El estado de suscripcion del propio SaaS se hace cumplir en el mismo middleware de permisos: si el gimnasio no pago, se degrada a solo-lectura y se responde HTTP 402 en las acciones de gestion.
+**En una línea:** El estado de suscripcion del propio SaaS se hace cumplir en el mismo middleware de permisos: si el inquilino no pago, se degrada a solo-lectura y se responde HTTP 402 en las acciones de gestion.
 
 **La regla para el próximo proyecto:** Para gatear features por estado de suscripcion del propio SaaS: modela el estado como un enum cerrado con CHECK en la DB; calcula la expiracion de trial/gracia de forma lazy dentro del mismo UPDATE que lee el estado (asi un trial vencido se degrada solo, sin depender de un cron); define los permisos permitidos por estado con Sets explicitos (read-only para 'restricted', minimo para 'suspended'/'cancelled'); enchufa el chequeo en el MISMO middleware que ya valida permisos RBAC; y responde 402 Payment Required (no 403) para que el front pueda distinguir 'falta de permiso' de 'falta de pago' y mostrar un CTA de upgrade. Excluye explicitamente a los usuarios finales (clientes del cliente) del bloqueo B2B.
 
-**Señal de que lo estás usando bien:** Un gimnasio con trial vencido puede seguir viendo sus datos pero no editar, y la API le devuelve 402 con el billingStatus en vez de 403; los alumnos del gimnasio nunca se ven afectados; y agregar un estado nuevo te obliga a tocar el enum, el CHECK y los Sets, sin logica de fechas dispersa.
+**Señal de que lo estás usando bien:** Un inquilino con trial vencido puede seguir viendo sus datos pero no editar, y la API le devuelve 402 con el billingStatus en vez de 403; los alumnos del inquilino nunca se ven afectados; y agregar un estado nuevo te obliga a tocar el enum, el CHECK y los Sets, sin logica de fechas dispersa.
 
 ---
 
