@@ -1,11 +1,11 @@
 # SZoluciones — Tornillos de TypeScript
-### El ADN técnico extraído del monorepo Movete
+### Base de conocimiento de ingeniería SZoluciones
 
-> **Qué es esto.** Este es el manual de "tornillos": las decisiones de ingeniería que un programador Senior tomó, de forma deliberada y repetida, a lo largo del monorepo **Movete** (una plataforma SaaS de gestión de gimnasios/centros deportivos). Cada tornillo es una regla reutilizable —no una curiosidad del proyecto— pensada para que cualquier agente de IA (o dev nuevo) la aplique en un proyecto SZoluciones **completamente distinto**.
+> **Qué es esto.** Este es el manual de "tornillos" de SZoluciones: las decisiones de ingeniería que un programador Senior tomó, de forma deliberada y repetida, en proyectos reales. Cada tornillo es una regla reutilizable —no una curiosidad de un proyecto específico— pensada para que cualquier agente de IA (o dev nuevo) la aplique en un proyecto SZoluciones **completamente distinto**.
 
-> **Cómo se generó.** Se auditó (solo lectura) todo el repo: backend **Fastify + TypeScript** (`packages/api`), web admin **Next.js 14 + Tailwind** (`apps/web-admin`), app móvil **Expo / React Native** (`apps/mobile`), base **PostgreSQL + Prisma**, contrato compartido (`packages/shared`), y el build con **pnpm workspaces + Turborepo**. Cada tornillo está respaldado por evidencia real (archivo + líneas + fragmento verbatim) verificada contra el código por un segundo agente que actuó de fact-checker.
+> **Cómo se construyó.** Se auditaron proyectos reales de SZoluciones con distintos stacks (backend **Fastify + TypeScript**, **FastAPI + Python**, frontend **Next.js**, app móvil **Expo / React Native**, base **PostgreSQL + Prisma/SQLAlchemy**). Cada tornillo está respaldado por evidencia real (archivo + líneas + fragmento verbatim) verificada contra el código por un segundo agente que actuó de fact-checker.
 
-> **Cómo leer "Aplica a".** `Universal` = sirve en cualquier stack/lenguaje. `Solo TypeScript` = es un idiom de TS/JS. `Solo este proyecto` = es específico de Movete (úsalo como referencia, no lo copies a ciegas).
+> **Cómo leer "Aplica a".** `Universal` = sirve en cualquier stack/lenguaje. `Solo TypeScript` = es un idiom de TS/JS. `Solo este proyecto` = es específico de un stack en particular (úsalo como referencia, no lo copies a ciegas).
 
 **60 tornillos · 13 áreas.** Empezá por el índice; si vas a tocar seguridad multi-tenant, leé primero el *Mapa de dependencias* al final.
 
@@ -56,7 +56,7 @@
 | 39 | Probar el caso negativo y el contrato, no solo el happy path | ÁREA 8 — Cuándo algo está realmente terminado | Universal |
 | 40 | RLS como red de seguridad final, testeada como atacante | ÁREA 8 — Cuándo algo está realmente terminado | Universal |
 | 41 | QA por smoke tests contra entorno real, gateando el release | ÁREA 8 — Cuándo algo está realmente terminado | Universal |
-| 42 | Un solo paquete, tres puertas (barrel @movete/shared) | ÁREA 9 — El contrato entre pantallas | Solo TS |
+| 42 | Un solo paquete, tres puertas (barrel @szoluciones/shared) | ÁREA 9 — El contrato entre pantallas | Solo TS |
 | 43 | Zod como fuente única: el validador ES el tipo | ÁREA 9 — El contrato entre pantallas | Solo TS |
 | 44 | Permisos como datos: el array const que tipa todo | ÁREA 9 — El contrato entre pantallas | Solo TS |
 | 45 | El espejo Prisma↔TS: enums de DB = union types de shared | ÁREA 9 — El contrato entre pantallas | Solo TS |
@@ -86,44 +86,44 @@
 
 **En una línea:** Las dependencias entre paquetes del monorepo nunca son rutas relativas ni versiones de npm: son workspace:* + un alias namespaced.
 
-**Lo que hace el Senior:** Cada vez que un paquete necesita otro paquete del repo lo declara como dependencia con el protocolo de pnpm 'workspace:*' (el asterisco = 'usá la versión que esté en el workspace, no busques en el registry'). Esto aparece de forma idéntica en 4 paquetes que consumen @movete/shared: packages/api, packages/ui, apps/web-admin y apps/mobile (los dos apps además consumen @movete/ui). El nombre del paquete siempre lleva el namespace @movete/ (ej @movete/shared, @movete/api) y se importa por ese alias, no por '../../packages/shared'. Los alias están mapeados en el tsconfig raíz (paths) apuntando al src/ del paquete, así el editor resuelve sin compilar. Resultado: podés mover carpetas o publicar paquetes sin romper imports, y pnpm linkea todo automáticamente.
+**Lo que hace el Senior:** Cada vez que un paquete necesita otro paquete del repo lo declara como dependencia con el protocolo de pnpm 'workspace:*' (el asterisco = 'usá la versión que esté en el workspace, no busques en el registry'). Esto aparece de forma idéntica en 4 paquetes que consumen @szoluciones/shared: packages/api, packages/ui, apps/web-admin y apps/mobile (los dos apps además consumen @szoluciones/ui). El nombre del paquete siempre lleva el namespace @movete/ (ej @szoluciones/shared, @szoluciones/api) y se importa por ese alias, no por '../../packages/shared'. Los alias están mapeados en el tsconfig raíz (paths) apuntando al src/ del paquete, así el editor resuelve sin compilar. Resultado: podés mover carpetas o publicar paquetes sin romper imports, y pnpm linkea todo automáticamente.
 
 **Ejemplo real del repo:**
 
 `packages/api/package.json:26-26`
 
 ```json
-"@movete/shared": "workspace:*",
+"@szoluciones/shared": "workspace:*",
 ```
 
 `packages/ui/package.json:15-15`
 
 ```json
-"@movete/shared": "workspace:*",
+"@szoluciones/shared": "workspace:*",
 ```
 
 `apps/web-admin/package.json:15-16`
 
 ```json
-"@movete/shared": "workspace:*",
-    "@movete/ui": "workspace:*",
+"@szoluciones/shared": "workspace:*",
+    "@szoluciones/ui": "workspace:*",
 ```
 
 `apps/mobile/package.json:25-26`
 
 ```json
-"@movete/shared": "workspace:*",
-    "@movete/ui": "workspace:*",
+"@szoluciones/shared": "workspace:*",
+    "@szoluciones/ui": "workspace:*",
 ```
 
 `tsconfig.json:27-32`
 
 ```json
 "paths": {
-      "@movete/shared": ["./packages/shared/src"],
-      "@movete/api": ["./packages/api/src"],
-      "@movete/ui": ["./packages/ui/src"],
-      "@movete/config": ["./packages/config/src"]
+      "@szoluciones/shared": ["./packages/shared/src"],
+      "@szoluciones/api": ["./packages/api/src"],
+      "@szoluciones/ui": ["./packages/ui/src"],
+      "@szoluciones/config": ["./packages/config/src"]
     }
 ```
 
@@ -377,7 +377,7 @@ if (!hasPermission(roleName, permissions, required)) {
     const billingAccess = await canUseOrganizationPermission(user.org_id, roleName, required);
     if (!billingAccess.allowed) {
       return reply.code(402).send({
-        message: 'La suscripción de Movete requiere atención',
+        message: 'La suscripción requiere atención',
         billingStatus: billingAccess.status,
       });
     }
@@ -1267,7 +1267,7 @@ let pgPool: Pool | null = null;
 export function getPgPool(): Pool {
   if (!pgPool) {
     pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://movete:movete123@localhost:5434/movete',
+      connectionString: process.env.DATABASE_URL || 'postgresql://szoluciones:szoluciones123@localhost:5432/szoluciones',
     });
   }
   return pgPool;
@@ -1300,9 +1300,9 @@ export async function checkDatabaseHealth(): Promise<boolean> {
 const pool = new Pool({
   host: 'localhost',
   port: 5434,
-  database: 'movete',
-  user: 'movete',
-  password: 'movete123',
+  database: 'szoluciones',
+  user: 'szoluciones',
+  password: 'szoluciones123',
 });
 ```
 
@@ -1312,7 +1312,7 @@ const pool = new Pool({
 import 'dotenv/config';
 // Force read DATABASE_URL into process.env
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://movete:movete_dev_password@localhost:5432/movete';
+  process.env.DATABASE_URL = 'postgresql://szoluciones:szoluciones_dev_password@localhost:5432/szoluciones';
 }
 ...
 // NOW import and run the app
@@ -1439,7 +1439,7 @@ const payload = data as { message?: unknown; error?: unknown };
 
 **En una línea:** Cada endpoint que recibe body hace `Schema.safeParse(request.body)` y, si falla, devuelve 400 con `{ message: 'Datos inválidos', errors: parsed.error.flatten().fieldErrors }`.
 
-**Lo que hace el Senior:** Antes de tocar la DB, valida el input con un schema de Zod usando `safeParse` (no `parse`, así no tira excepción: el error de validación es un caso de negocio, no del sistema). Cuando `!parsed.success`, devuelve 400 con un mensaje fijo en español más el detalle por campo via `flatten().fieldErrors`, que el front puede mapear a cada input. El literal 'Datos inválidos' aparece 37 veces en 14 archivos: es copy-paste deliberado de la misma plantilla. Los schemas viven en @movete/shared (CreatePaymentSchema, CreateClassAdminSchema, JoinOrganizationWithCredentialsSchema), compartidos entre back y front.
+**Lo que hace el Senior:** Antes de tocar la DB, valida el input con un schema de Zod usando `safeParse` (no `parse`, así no tira excepción: el error de validación es un caso de negocio, no del sistema). Cuando `!parsed.success`, devuelve 400 con un mensaje fijo en español más el detalle por campo via `flatten().fieldErrors`, que el front puede mapear a cada input. El literal 'Datos inválidos' aparece 37 veces en 14 archivos: es copy-paste deliberado de la misma plantilla. Los schemas viven en @szoluciones/shared (CreatePaymentSchema, CreateClassAdminSchema, JoinOrganizationWithCredentialsSchema), compartidos entre back y front.
 
 **Ejemplo real del repo:**
 
@@ -1729,7 +1729,7 @@ let where = `WHERE al.organization_id = $1`;
 
 **En una línea:** Toda mutación parsea el body con un schema Zod usando safeParse y corta con un 400 de errores por campo si falla, antes de tocar la base.
 
-**Lo que hace el Senior:** Al arranque de cada POST/PATCH/PUT corre `Schema.safeParse(request.body)`; si `!parsed.success` devuelve `reply.code(400)` con `{ message: 'Datos inválidos', errors: parsed.error.flatten().fieldErrors }`. Recién después usa `parsed.data` (a veces renombrado a `b`) para armar el INSERT/UPDATE. Los schemas viven en el paquete shared (`@movete/shared`) para compartir tipos con el front (activities, facilities), o se definen inline con `z.object({...})` y `.partial()` para el update (wods). En los UPDATE usa `COALESCE($n, columna)` para que un campo omitido no pise el valor existente: parcialidad real sin lógica de armado dinámico de SQL.
+**Lo que hace el Senior:** Al arranque de cada POST/PATCH/PUT corre `Schema.safeParse(request.body)`; si `!parsed.success` devuelve `reply.code(400)` con `{ message: 'Datos inválidos', errors: parsed.error.flatten().fieldErrors }`. Recién después usa `parsed.data` (a veces renombrado a `b`) para armar el INSERT/UPDATE. Los schemas viven en el paquete shared (`@szoluciones/shared`) para compartir tipos con el front (activities, facilities), o se definen inline con `z.object({...})` y `.partial()` para el update (wods). En los UPDATE usa `COALESCE($n, columna)` para que un campo omitido no pise el valor existente: parcialidad real sin lógica de armado dinámico de SQL.
 
 **Ejemplo real del repo:**
 
@@ -1962,7 +1962,7 @@ API:
 
 **En una línea:** Las credenciales sensibles de cada organización se guardan cifradas en la DB con una clave maestra derivada de env, no en columnas de texto plano.
 
-**Lo que hace el Senior:** Para el SaaS multiempresa, cada gimnasio carga sus propias credenciales de Mercado Pago. En vez de guardarlas tal cual, deriva una clave de cifrado por SHA-256 de PAYMENT_SETTINGS_SECRET (con cascada de fallbacks: MERCADO_PAGO_CREDENTIALS_SECRET -> JWT_SECRET -> default local 'movete-local-payment-settings-secret') y cifra cada secreto con AES-256-GCM, guardando IV (12 bytes) + auth tag + ciphertext en un formato versionado 'v1:iv:tag:cipher' (todo en base64). Las columnas en DB se llaman access_token_encrypted / webhook_secret_encrypted, dejando claro que están cifradas. El decryptSecret detecta el prefijo 'v1:' para soportar migración: si el valor no empieza con 'v1:', lo devuelve tal cual (compat con datos legacy). El public_key se guarda en claro a propósito porque no es secreto.
+**Lo que hace el Senior:** Para el SaaS multiempresa, cada gimnasio carga sus propias credenciales de Mercado Pago. En vez de guardarlas tal cual, deriva una clave de cifrado por SHA-256 de PAYMENT_SETTINGS_SECRET (con cascada de fallbacks: MERCADO_PAGO_CREDENTIALS_SECRET -> JWT_SECRET -> default local 'szoluciones-local-payment-settings-secret') y cifra cada secreto con AES-256-GCM, guardando IV (12 bytes) + auth tag + ciphertext en un formato versionado 'v1:iv:tag:cipher' (todo en base64). Las columnas en DB se llaman access_token_encrypted / webhook_secret_encrypted, dejando claro que están cifradas. El decryptSecret detecta el prefijo 'v1:' para soportar migración: si el valor no empieza con 'v1:', lo devuelve tal cual (compat con datos legacy). El public_key se guarda en claro a propósito porque no es secreto.
 
 **Ejemplo real del repo:**
 
@@ -1973,7 +1973,7 @@ function encryptionKey() {
   const source = process.env.PAYMENT_SETTINGS_SECRET
     ?? process.env.MERCADO_PAGO_CREDENTIALS_SECRET
     ?? process.env.JWT_SECRET
-    ?? 'movete-local-payment-settings-secret';
+    ?? 'szoluciones-local-payment-settings-secret';
   return crypto.createHash('sha256').update(source).digest();
 }
 
@@ -2025,7 +2025,7 @@ public_key TEXT,
 `packages/api/src/start.ts:4-6`
 
 ```ts
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://movete:movete_dev_password@localhost:5432/movete';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://szoluciones:szoluciones_dev_password@localhost:5432/szoluciones';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 ```
@@ -2109,7 +2109,7 @@ const nextConfig = {
 
 ```json
 "extra": {
-      "apiUrl": "https://api.movete.szoluciones.com",
+      "apiUrl": "https://api.szoluciones.com",
       "defaultOrganizationId": "3c0f34b8-98f1-4cc2-9797-85a4b7d5955a"
     },
 ```
@@ -2214,7 +2214,7 @@ fileParallelism: false,
     setupFiles: ['./src/test/vitest.setup.ts'],
     root: path.resolve(__dirname),
     env: {
-      DATABASE_URL: 'postgresql://movete:movete123@127.0.0.1:5434/movete',
+      DATABASE_URL: 'postgresql://szoluciones:szoluciones123@127.0.0.1:5432/szoluciones',
       JWT_SECRET: 'dev-secret',
       NODE_ENV: 'test',
     },
@@ -2467,11 +2467,11 @@ corepack pnpm ops:hardening
 
 ### ÁREA 9 — El contrato entre pantallas (código compartido entre backend, web y mobile)
 
-#### TORNILLO #42 — Un solo paquete, tres puertas (barrel @movete/shared)
+#### TORNILLO #42 — Un solo paquete, tres puertas (barrel @szoluciones/shared)
 
-**En una línea:** Centraliza tipos, validaciones y constantes en un paquete workspace y los re-exporta desde un único index para que backend/web/mobile importen todo desde @movete/shared.
+**En una línea:** Centraliza tipos, validaciones y constantes en un paquete workspace y los re-exporta desde un único index para que backend/web/mobile importen todo desde @szoluciones/shared.
 
-**Lo que hace el Senior:** Creó packages/shared como paquete npm propio (@movete/shared) con un index.ts que es puro barrel (re-exporta types, validations y permissions). Lo declaró como dependencia workspace:* en api, web-admin, mobile y ui, y lo cableó tanto en tsconfig paths (resolución en dev, en el tsconfig.json raíz) como en vitest.config del API (alias a ../shared/src/index.ts para tests). Así cualquier consumidor escribe import { X } from '@movete/shared' sin rutas relativas frágiles entre paquetes.
+**Lo que hace el Senior:** Creó packages/shared como paquete npm propio (@szoluciones/shared) con un index.ts que es puro barrel (re-exporta types, validations y permissions). Lo declaró como dependencia workspace:* en api, web-admin, mobile y ui, y lo cableó tanto en tsconfig paths (resolución en dev, en el tsconfig.json raíz) como en vitest.config del API (alias a ../shared/src/index.ts para tests). Así cualquier consumidor escribe import { X } from '@szoluciones/shared' sin rutas relativas frágiles entre paquetes.
 
 **Ejemplo real del repo:**
 
@@ -2491,9 +2491,9 @@ export * from './permissions';
 `packages/shared/package.json:2-7`
 
 ```json
-"name": "@movete/shared",
+"name": "@szoluciones/shared",
   "version": "1.0.0",
-  "description": "Shared types, utilities, and constants for Movete",
+  "description": "Shared types, utilities, and constants for SZoluciones",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -2502,27 +2502,27 @@ export * from './permissions';
 `apps/web-admin/package.json:15`
 
 ```json
-"@movete/shared": "workspace:*",
+"@szoluciones/shared": "workspace:*",
 ```
 
 `apps/mobile/package.json:25`
 
 ```json
-"@movete/shared": "workspace:*",
+"@szoluciones/shared": "workspace:*",
 ```
 
 `packages/api/vitest.config.ts:6-8`
 
 ```ts
 alias: {
-      '@movete/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@szoluciones/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
 ```
 
 `tsconfig.json:28`
 
 ```json
-"@movete/shared": ["./packages/shared/src"],
+"@szoluciones/shared": ["./packages/shared/src"],
 ```
 
 **La regla para el próximo proyecto:** En un monorepo, poné el contrato compartido (tipos, validaciones, constantes) en UN paquete con nombre de scope (@org/shared) y un index.ts que sea solo re-exports. Declaralo como workspace:* en cada consumidor y agregá el alias tanto en tsconfig paths (raíz) como en la config del test runner, para que todos importen con la misma ruta de paquete y nunca con '../../..'.
@@ -2539,7 +2539,7 @@ alias: {
 
 **En una línea:** Cada entrada de la API se define una sola vez como schema Zod en shared y el tipo TypeScript se deriva con z.infer, así runtime y compile-time nunca se desincronizan.
 
-**Lo que hace el Senior:** En validations.ts define ~25 schemas (CreateClass, CreatePlan, Login, etc.) y al lado de cada uno exporta el tipo con 'export type XInput = z.infer<typeof XSchema>'. Comparte sub-piezas (TIME_REGEX, PHONE_REGEX, PASSWORD_REGEX, helper isEndTimeAfterStartTime, BusinessHourSchema, ClassAdminBaseSchema, PlanBaseSchema) y compone schemas con .partial()/.extend()/.omit()/.superRefine() en vez de reescribirlos. Las rutas y servicios del API importan el schema desde @movete/shared y lo usan para validar; el mismo tipo inferido viaja como contrato. Las reglas de negocio (hora fin > hora inicio, CLASS_PACK requiere créditos) viven dentro del schema vía refine/superRefine, no sueltas en los handlers.
+**Lo que hace el Senior:** En validations.ts define ~25 schemas (CreateClass, CreatePlan, Login, etc.) y al lado de cada uno exporta el tipo con 'export type XInput = z.infer<typeof XSchema>'. Comparte sub-piezas (TIME_REGEX, PHONE_REGEX, PASSWORD_REGEX, helper isEndTimeAfterStartTime, BusinessHourSchema, ClassAdminBaseSchema, PlanBaseSchema) y compone schemas con .partial()/.extend()/.omit()/.superRefine() en vez de reescribirlos. Las rutas y servicios del API importan el schema desde @szoluciones/shared y lo usan para validar; el mismo tipo inferido viaja como contrato. Las reglas de negocio (hora fin > hora inicio, CLASS_PACK requiere créditos) viven dentro del schema vía refine/superRefine, no sueltas en los handlers.
 
 **Ejemplo real del repo:**
 
@@ -2584,7 +2584,7 @@ export type CreatePlanInput = z.infer<typeof CreatePlanSchema>;
 `packages/api/src/routes/classes.ts:4`
 
 ```ts
-import { CreateClassAdminSchema, CreateScheduleBlockSchema, UpdateClassAdminSchema } from '@movete/shared';
+import { CreateClassAdminSchema, CreateScheduleBlockSchema, UpdateClassAdminSchema } from '@szoluciones/shared';
 ```
 
 `packages/api/src/services/auth.ts:5-12`
@@ -2597,7 +2597,7 @@ import {
   type RegisterInput,
   type LoginInput,
   type RefreshTokenInput,
-} from '@movete/shared';
+} from '@szoluciones/shared';
 ```
 
 **La regla para el próximo proyecto:** Definí cada payload de entrada UNA vez como schema Zod en el paquete compartido y derivá el tipo con 'export type XInput = z.infer<typeof XSchema>'. Nunca declares por separado una interface y un validador para lo mismo. Meté las reglas de negocio cross-field dentro del schema (refine/superRefine) y reutilizá regex/helpers/sub-schemas componiendo con partial/extend/omit en vez de copiar.
@@ -2606,7 +2606,7 @@ import {
 
 **Aplica a:** [ ] Universal  [x] Solo TypeScript  [ ] Solo este proyecto
 
-**Depende de:** #42 — Un solo paquete, tres puertas (barrel @movete/shared)
+**Depende de:** #42 — Un solo paquete, tres puertas (barrel @szoluciones/shared)
 
 ---
 
@@ -2645,7 +2645,7 @@ for (const [roleName, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) 
 `packages/api/src/routes/platform.ts:5`
 
 ```ts
-import { DEFAULT_ROLE_PERMISSIONS } from '@movete/shared';
+import { DEFAULT_ROLE_PERMISSIONS } from '@szoluciones/shared';
 ```
 
 **La regla para el próximo proyecto:** Modelá los catálogos cerrados (permisos, roles, estados) como un array/objeto const TS y derivá de ahí TODO: el union type ('as const' + indexed access), las listas, los defaults y los labels de UI. Que el seed de la base y la UI consuman la MISMA constante. Nunca repitas el string 'members.read' a mano en el código.
@@ -2654,7 +2654,7 @@ import { DEFAULT_ROLE_PERMISSIONS } from '@movete/shared';
 
 **Aplica a:** [ ] Universal  [x] Solo TypeScript  [ ] Solo este proyecto
 
-**Depende de:** #42 — Un solo paquete, tres puertas (barrel @movete/shared)
+**Depende de:** #42 — Un solo paquete, tres puertas (barrel @szoluciones/shared)
 
 ---
 
@@ -2715,7 +2715,7 @@ export interface Reservation {
 
 **Aplica a:** [ ] Universal  [x] Solo TypeScript  [ ] Solo este proyecto
 
-**Depende de:** #42 — Un solo paquete, tres puertas (barrel @movete/shared); #43 — Zod como fuente única: el validador ES el tipo
+**Depende de:** #42 — Un solo paquete, tres puertas (barrel @szoluciones/shared); #43 — Zod como fuente única: el validador ES el tipo
 
 ---
 
@@ -2723,7 +2723,7 @@ export interface Reservation {
 
 **En una línea:** Define una sola forma de respuesta (ApiResponse<T>), un solo shape de token (JwtPayload) y un solo contexto de request (RequestContext) en shared, y el backend los respeta literalmente.
 
-**Lo que hace el Senior:** En types.ts define el sobre genérico ApiResponse<T> (success/data/error{code,message,details}/meta) y PaginatedResponse<T>, más JwtPayload (con sub/org_id marcados como críticos para multi-tenancy) y RequestContext. El middleware de tenancy importa esos tipos desde @movete/shared, castea request.user a JwtPayload, arma el RequestContext y, cuando rechaza, responde con la forma exacta de ApiResponse (success:false, error:{code,message}). Es decir, el contrato no es solo declarativo: el backend serializa los errores 401 con esa estructura.
+**Lo que hace el Senior:** En types.ts define el sobre genérico ApiResponse<T> (success/data/error{code,message,details}/meta) y PaginatedResponse<T>, más JwtPayload (con sub/org_id marcados como críticos para multi-tenancy) y RequestContext. El middleware de tenancy importa esos tipos desde @szoluciones/shared, castea request.user a JwtPayload, arma el RequestContext y, cuando rechaza, responde con la forma exacta de ApiResponse (success:false, error:{code,message}). Es decir, el contrato no es solo declarativo: el backend serializa los errores 401 con esa estructura.
 
 **Ejemplo real del repo:**
 
@@ -2784,7 +2784,7 @@ export interface RequestContext {
 
 **Aplica a:** [x] Universal  [ ] Solo TypeScript  [ ] Solo este proyecto
 
-**Depende de:** #42 — Un solo paquete, tres puertas (barrel @movete/shared); #44 — Permisos como datos: el array const que tipa todo
+**Depende de:** #42 — Un solo paquete, tres puertas (barrel @szoluciones/shared); #44 — Permisos como datos: el array const que tipa todo
 
 ---
 
@@ -2955,7 +2955,7 @@ function mapActivity(row: any) {
 
 **En una línea:** Las validaciones viven en packages/shared como CreateXSchema, se derivan los updates con .partial() y el tipo TS con z.infer, reusándolos en backend y frontend.
 
-**Lo que hace el Senior:** Define el schema una vez en packages/shared/src/validations.ts: CreateXSchema = z.object({...}) con mensajes de error en español, y UpdateXSchema = CreateXSchema.partial() para que el PATCH/PUT acepte campos opcionales sin reescribir el shape. Exporta también el tipo con export type CreateXInput = z.infer<typeof CreateXSchema>. El backend importa estos schemas desde @movete/shared. Detalle real: en facilities, UpdateFacilitySchema usa CreateFacilitySchema.partial().extend({...}) (agrega algún campo extra al partial). Excepción pragmática: cuando un módulo es muy chico o nuevo (wods), define el schema inline con z dentro del propio routes file, pero igual usa la dupla Input + Input.partial().
+**Lo que hace el Senior:** Define el schema una vez en packages/shared/src/validations.ts: CreateXSchema = z.object({...}) con mensajes de error en español, y UpdateXSchema = CreateXSchema.partial() para que el PATCH/PUT acepte campos opcionales sin reescribir el shape. Exporta también el tipo con export type CreateXInput = z.infer<typeof CreateXSchema>. El backend importa estos schemas desde @szoluciones/shared. Detalle real: en facilities, UpdateFacilitySchema usa CreateFacilitySchema.partial().extend({...}) (agrega algún campo extra al partial). Excepción pragmática: cuando un módulo es muy chico o nuevo (wods), define el schema inline con z dentro del propio routes file, pero igual usa la dupla Input + Input.partial().
 
 **Ejemplo real del repo:**
 
@@ -2975,7 +2975,7 @@ export const UpdateActivitySchema = CreateActivitySchema.partial();
 `packages/api/src/routes/facilities.ts:4`
 
 ```ts
-import { CreateFacilitySchema, UpdateFacilitySchema } from '@movete/shared';
+import { CreateFacilitySchema, UpdateFacilitySchema } from '@szoluciones/shared';
 ```
 
 `packages/shared/src/validations.ts:360-378`
@@ -3079,7 +3079,7 @@ export function useActivities() {
 
 **En una línea:** Los secretos de terceros (Access Token, webhook secret) nunca se guardan en texto plano: se cifran con AES-256-GCM y se versionan con prefijo para poder rotar el formato.
 
-**Lo que hace el Senior:** Centraliza encryptSecret/decryptSecret en payment-settings.ts. La clave se deriva con SHA-256 de PAYMENT_SETTINGS_SECRET (con fallback a MERCADO_PAGO_CREDENTIALS_SECRET, luego JWT_SECRET, y por ultimo una constante local 'movete-local-payment-settings-secret' solo para dev). Usa AES-256-GCM (cifrado autenticado: detecta manipulacion via authTag), IV aleatorio de 12 bytes por valor, y serializa todo como 'v1:iv:tag:ciphertext' en base64. El prefijo 'v1:' permite versionar el esquema y, en decrypt, si el valor no empieza con 'v1:' lo devuelve tal cual (compatibilidad con datos viejos sin cifrar). Reusa exactamente estas mismas funciones desde platform-billing.ts (las importa) para los secretos de la plataforma, en vez de reimplementar el cifrado.
+**Lo que hace el Senior:** Centraliza encryptSecret/decryptSecret en payment-settings.ts. La clave se deriva con SHA-256 de PAYMENT_SETTINGS_SECRET (con fallback a MERCADO_PAGO_CREDENTIALS_SECRET, luego JWT_SECRET, y por ultimo una constante local 'szoluciones-local-payment-settings-secret' solo para dev). Usa AES-256-GCM (cifrado autenticado: detecta manipulacion via authTag), IV aleatorio de 12 bytes por valor, y serializa todo como 'v1:iv:tag:ciphertext' en base64. El prefijo 'v1:' permite versionar el esquema y, en decrypt, si el valor no empieza con 'v1:' lo devuelve tal cual (compatibilidad con datos viejos sin cifrar). Reusa exactamente estas mismas funciones desde platform-billing.ts (las importa) para los secretos de la plataforma, en vez de reimplementar el cifrado.
 
 **Ejemplo real del repo:**
 
@@ -3089,7 +3089,7 @@ export function useActivities() {
 const source = process.env.PAYMENT_SETTINGS_SECRET
     ?? process.env.MERCADO_PAGO_CREDENTIALS_SECRET
     ?? process.env.JWT_SECRET
-    ?? 'movete-local-payment-settings-secret';
+    ?? 'szoluciones-local-payment-settings-secret';
   return crypto.createHash('sha256').update(source).digest();
 ...
   const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
@@ -3193,14 +3193,14 @@ El redirect de Mercado Pago a la app no confirma el pago. La activación solo oc
 
 **En una línea:** Cada operacion de pago resuelve y filtra por organization_id de punta a punta, y cada gimnasio usa sus propias credenciales de Mercado Pago, de modo que el dinero liquida en la cuenta correcta y nada se mezcla entre tenants.
 
-**Lo que hace el Senior:** El webhook exige el org_id (viene en el query string de la notification_url como org_id y como fallback en metadata.movete_organization_id) y rechaza con 400 si falta; con ese org_id carga las credenciales especificas de esa organizacion via getMercadoPagoSettings (404 si no esta configurada). La preferencia de pago se crea con el Access Token de la org activa (Mercado Pago liquida en la cuenta del gimnasio, Movete no cobra en su nombre). En el circuito de plataforma, el external_reference codifica el tenant como 'movete:{organizationId}' y al sincronizar lo desempaqueta con replace(/^movete:/,''). La query de matcheo de solicitudes incluye 'WHERE pr.organization_id = $2' antes de aplicar el pago.
+**Lo que hace el Senior:** El webhook exige el org_id (viene en el query string de la notification_url como org_id y como fallback en metadata.szoluciones_organization_id) y rechaza con 400 si falta; con ese org_id carga las credenciales específicas de esa organización via getMercadoPagoSettings (404 si no está configurada). La preferencia de pago se crea con el Access Token de la org activa (Mercado Pago liquida en la cuenta del inquilino, la plataforma no cobra en su nombre). En el circuito de plataforma, el external_reference codifica el tenant como 'szoluciones:{organizationId}' y al sincronizar lo desempaqueta con replace(/^szoluciones:/,''). La query de matcheo de solicitudes incluye 'WHERE pr.organization_id = $2' antes de aplicar el pago.
 
 **Ejemplo real del repo:**
 
 `packages/api/src/routes/payments.ts:859-873`
 
 ```ts
-const organizationId = String(query?.org_id ?? body?.metadata?.movete_organization_id ?? '');
+const organizationId = String(query?.org_id ?? body?.metadata?.szoluciones_organization_id ?? '');
 ...
     if (!organizationId) {
       return reply.code(400).send({ message: 'Missing Mercado Pago organization id' });
@@ -3222,15 +3222,15 @@ FROM membership_purchase_requests pr
 `packages/api/src/services/platform-billing.ts:583-635`
 
 ```ts
-const externalReference = `movete:${input.organizationId}`;
+const externalReference = `szoluciones:${input.organizationId}`;
 ...
-  const organizationId = String(payload.external_reference ?? '').replace(/^movete:/, '');
+  const organizationId = String(payload.external_reference ?? '').replace(/^szoluciones:/, '');
 ```
 
 `docs/mercado-pago.md:3-3`
 
 ```md
-Movete no cobra en nombre de todos los gimnasios: la API crea la preferencia usando el Access Token de la organización activa y Mercado Pago liquida el dinero en esa cuenta.
+La plataforma no cobra en nombre de todos los inquilinos: la API crea la preferencia usando el Access Token de la organización activa y Mercado Pago liquida el dinero en esa cuenta.
 ```
 
 **La regla para el próximo proyecto:** En un SaaS multi-tenant que integra pagos, haz que el tenant viaje en todo el circuito: incluye el tenant_id en la notification_url del webhook (no solo en metadata, que puede no venir), codificalo tambien en el external_reference con un prefijo namespaced ('app:{id}') para reconciliar, carga las credenciales del proveedor por-tenant (cada cliente cobra en su cuenta), y agrega 'AND tenant_id = $X' a TODA query que toque dinero antes de mutar. Rechaza con 400/404 si el tenant no se puede resolver, en vez de aplicar el pago a ciegas.
@@ -3297,7 +3297,7 @@ CONSTRAINT organization_subscriptions_status_check CHECK (
 const billingAccess = await canUseOrganizationPermission(user.org_id, roleName, required);
     if (!billingAccess.allowed) {
       return reply.code(402).send({
-        message: 'La suscripción de Movete requiere atención',
+        message: 'La suscripción requiere atención',
         billingStatus: billingAccess.status,
       });
 ```
@@ -3629,11 +3629,11 @@ Qué tornillos necesitan a otros para funcionar bien. Si vas a aplicar uno, mir�
 - **#39 — Probar el caso negativo y el contrato, no solo el happy path** se apoya en **#38** (Test de integración con DB real, sin mocks (inject + seed)).
 - **#40 — RLS como red de seguridad final, testeada como atacante** se apoya en **#38** (Test de integración con DB real, sin mocks (inject + seed)), **#41** (QA por smoke tests contra entorno real, gateando el release).
 - **#41 — QA por smoke tests contra entorno real, gateando el release** se apoya en **#39** (Probar el caso negativo y el contrato, no solo el happy path), **#40** (RLS como red de seguridad final, testeada como atacante).
-- **#42 — Un solo paquete, tres puertas (barrel @movete/shared)** se apoya en **#43** (Zod como fuente única: el validador ES el tipo), **#44** (Permisos como datos: el array const que tipa todo).
-- **#43 — Zod como fuente única: el validador ES el tipo** se apoya en **#42** (Un solo paquete, tres puertas (barrel @movete/shared)).
-- **#44 — Permisos como datos: el array const que tipa todo** se apoya en **#42** (Un solo paquete, tres puertas (barrel @movete/shared)).
-- **#45 — El espejo Prisma↔TS: enums de DB = union types de shared** se apoya en **#42** (Un solo paquete, tres puertas (barrel @movete/shared)), **#43** (Zod como fuente única: el validador ES el tipo).
-- **#46 — Contrato de respuesta y de identidad uniforme (ApiResponse / JwtPayload / RequestContext)** se apoya en **#42** (Un solo paquete, tres puertas (barrel @movete/shared)), **#44** (Permisos como datos: el array const que tipa todo).
+- **#42 — Un solo paquete, tres puertas (barrel @szoluciones/shared)** se apoya en **#43** (Zod como fuente única: el validador ES el tipo), **#44** (Permisos como datos: el array const que tipa todo).
+- **#43 — Zod como fuente única: el validador ES el tipo** se apoya en **#42** (Un solo paquete, tres puertas (barrel @szoluciones/shared)).
+- **#44 — Permisos como datos: el array const que tipa todo** se apoya en **#42** (Un solo paquete, tres puertas (barrel @szoluciones/shared)).
+- **#45 — El espejo Prisma↔TS: enums de DB = union types de shared** se apoya en **#42** (Un solo paquete, tres puertas (barrel @szoluciones/shared)), **#43** (Zod como fuente única: el validador ES el tipo).
+- **#46 — Contrato de respuesta y de identidad uniforme (ApiResponse / JwtPayload / RequestContext)** se apoya en **#42** (Un solo paquete, tres puertas (barrel @szoluciones/shared)), **#44** (Permisos como datos: el array const que tipa todo).
 - **#47 — setupXRoutes: el módulo es una función auto-instalable** se apoya en **#48** (Guards gemelos read/manage al tope del módulo), **#51** (Registrar una vez en index.ts; gatear en Sidebar y hook en mobile).
 - **#48 — Guards gemelos read/manage al tope del módulo** se apoya en **#47** (setupXRoutes: el módulo es una función auto-instalable), **#51** (Registrar una vez en index.ts; gatear en Sidebar y hook en mobile).
 - **#49 — Endpoint CRUD canónico: safeParse + tenant + soft-delete + mapX** se apoya en **#50** (Schema Zod compartido: Create + Update.partial() como fuente de verdad), **#47** (setupXRoutes: el módulo es una función auto-instalable).
@@ -3700,12 +3700,12 @@ Imaginá que el proyecto nuevo es un **programa de puntos** (cada empresa con su
 
 - **Multi-tenant (los puntos de una empresa no tocan a otra):** #9 (El org_id sale SIEMPRE del JWT, nunca del cliente) + #10 (Cada query carga su propio WHERE organization_id (filtro app-layer omnipresente)).
 - **Roles (quién carga reglas de canje vs quién consulta su saldo):** #5 (JWT flaco para identidad, DB gorda para permisos) + #8 (Catálogo de permisos como array de strings, fuente única compartida).
-- **Contrato compartido (qué es un punto, un canje, una recompensa: definido una sola vez):** #42 (Un solo paquete, tres puertas (barrel @movete/shared)) + #43 (Zod como fuente única: el validador ES el tipo).
+- **Contrato compartido (qué es un punto, un canje, una recompensa: definido una sola vez):** #42 (Un solo paquete, tres puertas (barrel @szoluciones/shared)) + #43 (Zod como fuente única: el validador ES el tipo).
 - **Consistencia bajo concurrencia (canjear consume un saldo finito: dos canjes no gastan el mismo punto):** #13 (La transacción como guardián de la regla de negocio) + #15 (Validar con Zod safeParse antes de tocar la DB).
 - **Secrets multiempresa (si cada empresa integra su proveedor de notificaciones/pagos):** #34 (Secrets multiempresa cifrados con AES-256-GCM, nunca en texto plano) + #35 (Fallbacks de env en cascada: DB -> env -> default local).
 - **Arranque y flags (levantar sin pedir secretos, apagar por defecto lo caro):** #33 (El .env.example como contrato narrado, no como lista muerta) + #37 (Feature flags con default apagado para lo caro o riesgoso).
 
-Fijate el patrón: **no inventás arquitectura nueva**, ensamblás tornillos ya probados. Un programa de puntos es, estructuralmente, las reservas de Movete con otro nombre.
+Fijate el patrón: **no inventás arquitectura nueva**, ensamblás tornillos ya probados. Un programa de puntos es, estructuralmente, un sistema de reservas con otro nombre.
 
 ### Regla de oro
 
