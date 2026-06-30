@@ -1,12 +1,12 @@
 # Szoluciones — Tornillero Python (FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic + PostgreSQL + React)
 
-Bienvenido. Esto es el "tornillero": la caja de tornillos que un Senior usa una y otra vez en esta API real de gestión de psicólogas (multi-tenant por `psicologa_id`, con integraciones de WhatsApp, LLM y pagos). Cada tornillo es un patrón concreto, anclado a un archivo y una línea del repo, con la regla destilada para que lo reuses en tu próximo proyecto.
+Bienvenido. Esto es el "tornillero": la caja de tornillos que un Senior usa una y otra vez en proyectos reales SZoluciones (multi-tenant con FastAPI, con integraciones de WhatsApp, LLM y pagos). Cada tornillo es un patrón concreto, anclado a un archivo y una línea del repo, con la regla destilada para que lo reuses en tu próximo proyecto.
 
 Te lo explico como si recién entraras al equipo: cuando aparezca un término técnico, lo aclaro entre paréntesis la primera vez. Tono de colega, precisión de manual.
 
 Un par de definiciones que se repiten todo el tiempo:
 
-- **Multi-tenant** (multi-inquilino): una sola base de datos y una sola app sirven a muchas psicólogas, y cada una solo ve lo suyo. El "inquilino" (tenant) se identifica por `psicologa_id`.
+- **Multi-tenant** (multi-inquilino): una sola base de datos y una sola app sirven a muchos inquilinos, y cada uno solo ve lo suyo. El "inquilino" (tenant) se identifica por `tenant_id` (o equivalente según el dominio).
 - **Fail-closed** (falla cerrado): ante la duda o el error, el sistema deniega/aborta en vez de dejar pasar. Lo opuesto es fail-open (peligroso).
 - **ORM** (Object-Relational Mapping): la capa que mapea filas de la base a objetos Python; acá es SQLAlchemy.
 - **Service** (servicio): módulo Python donde vive la regla de negocio, separado del handler HTTP.
@@ -156,7 +156,7 @@ Un par de definiciones que se repiten todo el tiempo:
 ## ÁREA 2 — LA PUERTA Y EL PORTERO
 
 ### TORNILLO #5 — 404 en vez de 403 para datos de otro tenant
-**En una línea:** El recurso de otra psicóloga "no existe" para vos: misma URL, distinta respuesta, sin filtrar la existencia del dato ajeno.
+**En una línea:** El recurso de otro inquilino "no existe" para vos: misma URL, distinta respuesta, sin filtrar la existencia del dato ajeno.
 **Lo que hace el Senior:** Centraliza el control de ownership (dueñez) en helpers `obtener_*_de_psicologa` que filtran por `id` AND `psicologa_id` en la misma query; si no aparece, lanzan `HTTPException(404)`. No hay un 403 "esto existe pero no es tuyo" que confirmaría la existencia. El mismo helper hace autorización y carga del objeto en un solo paso.
 **Ejemplo real del repo:** `app/services/psicologa_scope_service.py:11` `cliente = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.psicologa_id == psicologa_id).first(); if cliente is None: raise HTTPException(status_code=404, detail="Cliente no encontrado")`. Los 5 helpers (cliente/turno/disponibilidad/transacción/conversación) usan el mismo patrón en `:11,21,31,45,59`.
 **La regla para el próximo proyecto:** En datos multi-tenant no separes "¿existe?" de "¿es tuyo?". Filtrá por `id` AND `tenant_id` en una sola query y devolvé 404 (no 403) si no aparece. Encapsulalo en un helper reutilizable que devuelva el objeto ya autorizado.
@@ -208,7 +208,7 @@ Un par de definiciones que se repiten todo el tiempo:
 **Lo que hace el Senior:** En operaciones donde un `cliente_id`/`turno_id` llega en el body (cobro manual, crear transacción), invoca `obtener_*_de_psicologa(db, id, usuario.id)` como guard: si el id es de otro tenant, corta con 404 antes de procesar. A veces descarta el return; lo importante es el efecto de autorización+404.
 **Ejemplo real del repo:** `app/routes/admin.py:339` `obtener_cliente_de_psicologa(db, datos.cliente_id, usuario.id)` (guard antes de `procesar_pago_parcial`; el `cliente_id` viene del body). Repetido en `transacciones.py:184,187,221` y `turnos.py:116`.
 **La regla para el próximo proyecto:** Cuando un id de recurso llega por body/query y vas a operar sobre él, validá ownership con el helper de tenant ANTES de la lógica de negocio, incluso si no necesitás el objeto. No asumas que un id en el payload es del tenant del usuario.
-**Señal de que lo estás usando bien:** Intentar cobrar/transaccionar contra un cliente de otra psicóloga da 404, no un error de negocio más adentro.
+**Señal de que lo estás usando bien:** Intentar cobrar/transaccionar contra un cliente de otro inquilino da 404, no un error de negocio más adentro.
 **Aplica a:** [x] Universal
 
 ### TORNILLO #12 — bcrypt con fallback PBKDF2 y verify por prefijo
@@ -228,7 +228,7 @@ Un par de definiciones que se repiten todo el tiempo:
 **Aplica a:** [x] Universal
 
 ### TORNILLO #71 — Ruteo de tenant fail-closed por identificador entrante (`phone_number_id`)
-**En una línea:** Un webhook compartido por todas las psicólogas resuelve a qué tenant pertenece el mensaje mirando el identificador entrante (el `phone_number_id` de Meta); si no matchea una integración activa, corta — no adivina ni cae a un default.
+**En una línea:** Un webhook compartido por todas las inquilinos resuelve a qué tenant pertenece el mensaje mirando el identificador entrante (el `phone_number_id` de Meta); si no matchea una integración activa, corta — no adivina ni cae a un default.
 **Lo que hace el Senior:** El endpoint de Meta no recibe un `psicologa_id` confiable en el payload: resuelve el tenant buscando el `phone_number_id` entrante contra las integraciones Meta ACTIVAS (`get_meta_config_by_phone_number_id(db, phone_number_id, only_active=True)`). Si hay config activa, usa su `psicologa_id`; si no hay ninguna (o no vino ni `psicologa_id` ni `phone_number_id`), lanza `HTTPException(400)` indicando el id que no pudo resolver. Es el caso "mismo endpoint, distinto dueño según quién escribe" resuelto fail-closed: ante ambigüedad, deniega en vez de adivinar el destinatario.
 **Ejemplo real del repo:** `app/routes/webhooks.py:105` `if phone_number_id: config = get_meta_config_by_phone_number_id(db, phone_number_id, only_active=True); if config is not None: return cast(str, config.psicologa_id)`; `:109` `raise HTTPException(status_code=400, detail=f"No existe una integración Meta activa para el phone_number_id '{phone_number_id}'.")`; `:120` `raise HTTPException(status_code=400, detail="psicologa_id o phone_number_id son obligatorios para enrutar mensajes Meta")`. Helper en `app/services/meta_integration_service.py`. Declarado como invariante de producción en `.github/copilot-instructions.md:7` ("must not weaken the fail-closed Meta WhatsApp routing by `phone_number_id`").
 **La regla para el próximo proyecto:** Cuando un canal de entrada (webhook, número, dominio) es compartido por varios tenants, resolvé el tenant desde el identificador entrante contra un registro de integraciones ACTIVAS y fallá cerrado si no hay match único: nunca caigas a un tenant por defecto ni adivines. El identificador entrante decide el destino con el mismo rigor con que la firma decide el origen.
